@@ -1,0 +1,9 @@
+robosim clearWorld
+robosim addWall 3 8.4 3 6.6 [robosim getNewWallID]
+robosim addWall 3 6.6 5.6 6.6 [robosim getNewWallID]
+robosim addWall 5.6 6.6 5.6 8.4 [robosim getNewWallID]
+robosim addWall 1 8.4 6.6 8.4 [robosim getNewWallID]
+robosim addWall 8 8.4 8 6.6 [robosim getNewWallID]
+robosim addWall 5.2 4.2 6.2 4.2 [robosim getNewWallID]
+robosim addWall 5.2 4.2 5.6 3.4 [robosim getNewWallID]
+robosim addWall 5.6 3.4 6.2 4.2 [robosim getNewWallID]

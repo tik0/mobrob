@@ -1,0 +1,6 @@
+#clearWorld
+robosim addWall 25.15 5.45 3.25 1.65 [robosim getNewWallID]
+robosim addWall 4.7 1.2 1.45 21.25 [robosim getNewWallID]
+robosim addWall 0.6 18.7 15.5 28 [robosim getNewWallID]
+robosim addWall 12.2 27.05 24.45 19.15 [robosim getNewWallID]
+robosim addWall 22.3 21.65 23.3 3.7 [robosim getNewWallID]
