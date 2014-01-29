@@ -1,32 +1,31 @@
 # ===========================================================================
 # 
-# differential.tcl --
-# manual control with uncertainty visualization / simple obstacle avoidance
-# for a robot with differential steering
+# A4.tcl --
 #
-# Ralf Moeller
-# 
-#    Copyright (C) 2006
-#    Computer Engineering Group
-#    Faculty of Technology
-#    University of Bielefeld
-#    www.ti.uni-bielefeld.de
-# 
-# 1.0 / 29. Mar 06 (rm)
-# - from scratch
-# 1.1 / 30. Mar 06 (rm)
-# 1.2 / 30. Mar 06 (rm)
-# 1.3 / 31. Mar 06 (rm)
-# 1.4 / 12. Apr 06 (rm)
-# - with matexpr
-# 1.5 /  6. Mar 07 (rm)
-# - with freeze of uncertainty ellipse (Tab)
-# 1.6 / 14. Jun 07 (rm)
-# 1.7 / 21. Dec 11 (ak)
-# - corrected for errors due to new syntax in robosim
-#
+# 0.1
 # ===========================================================================
 
+# ### Set variables
+set sigmaTheta 0.1
+set sigmaAlpha 0.1
+set numBecons 10
+
+# ### Get some functions
+source "functions/rndMultiVarGauss.tcl"
+source "functions/isnan.tcl"
+source "functions/motionCovariance.tcl"
+source "functions/motionJacobian.tcl"
+source "functions/updatePose.tcl"
+source "functions/drawSample.tcl"
+source "functions/poseJacobian.tcl"
+source "functions/getNormFactor.tcl"
+source "functions/normImportanceFactors.tcl"
+source "functions/logAdd.tcl"
+source "functions/normImportanceFactorsLog.tcl"
+source "functions/getNormFactorLog.tcl"
+source "functions/rndGauss.tcl"
+
+# ### Common script
 puts "([info script])"
 
 robosim clearWorld
@@ -92,63 +91,13 @@ set x 10.0
 set y 10.0
 set theta 0.0
 
-# path integration, see Siegwart/Nourbakhsh p.188
-proc updatePose {x y theta vl vr dt} {
-    global l
-    set sl [expr $dt * $vl]
-    set sr [expr $dt * $vr]
-    set b [expr 2.0 * $l]
-    set slsr2 [expr ($sl + $sr) / 2.0]
-    set srsl2b [expr ($sr - $sl) / (2.0 * $b)]
-    set x [expr $x + $slsr2 * cos($theta + $srsl2b)]
-    set y [expr $y + $slsr2 * sin($theta + $srsl2b)]
-    set theta [expr $theta + 2.0 * $srsl2b]
-    return "$x $y $theta"
-}
-
-# motion Jacobian, see Siegwart/Nourbakhsh p.189
-proc motionJacobian {FdeltaName x y theta vl vr dt} {
-    global l
-    set sl [expr $dt * $vl]
-    set sr [expr $dt * $vr]
-    set b [expr 2.0 * $l]
-    set ds [expr ($sl + $sr) / 2.0]
-    set dtheta [expr ($sr - $sl) / $b]
-    set tt [expr $theta + $dtheta / 2.0]
-    set ss [expr $ds / $b]
-    set c [expr 0.5 * cos($tt)]
-    set s [expr 0.5 * sin($tt)]
-    mat setRowByRow $FdeltaName \
-      "{[expr $c - $ss * $s] [expr $c + $ss * $s]} \
-         {[expr $s + $ss * $c] [expr $s - $ss * $c]} \
-         {[expr 1.0 / $b]      [expr -1.0 / $b]}"
-}
-
-# pose Jacobian, see Siegwart/Nourbakhsh p.189
-proc poseJacobian {FpName x y theta vl vr dt} {
-    global l
-    set sl [expr $dt * $vl]
-    set sr [expr $dt * $vr]
-    set b [expr 2.0 * $l]
-    set ds [expr ($sl + $sr) / 2.0]
-    set dtheta [expr ($sr - $sl) / $b]
-    set tt [expr $theta + $dtheta / 2.0]
-    set ss [expr $ds / $b]
-    set c [expr cos($tt)]
-    set s [expr sin($tt)]
-    mat setRowByRow $FpName \
-      "{1.0 0.0 [expr -$ds * $s]} \
-         {0.0 1.0 [expr  $ds * $c]} \
-         {0.0 0.0 1.0}"
-}
-
-# motion covariance, see Siegwart/Nourbakhsh p.188
-proc motionCovariance {CdeltaName x y theta vl vr dt kl kr} {
-    set sl [expr $dt * $vl]
-    set sr [expr $dt * $vr]
-    mat setRowByRow $CdeltaName \
-      "{[expr $kr * abs($sr)] 0.0} \
-         {0.0 [expr $kl * abs($sl)]}"
+# Initiate beacons
+for {set k 0} {$k < $numBecons} {incr k} {
+    # x y
+	# Random
+    set becon_k($k) [list [expr rand()*$widthW1] [expr rand()*$heightW1]]
+	# draw a pair of becons
+    drawCircleWC world1 [lindex $becon_k($k) 0] [lindex $becon_k($k) 1] 3 red yellow 1 "becons"
 }
 
 #----------------------------------------------------------------------------
@@ -214,9 +163,11 @@ set scale 1.0
 set freeze 0
 
 proc manualControlLoop {} {
-    global x y theta dt vl vr stopLoop kl kr c00 c11 c22 scale points freeze
+    global x y theta dt vl vr stopLoop kl kr c00 c11 c22 scale points freeze sigmaTheta becon_k numBecons sigmaAlpha PI
 
-    source simple.world
+	
+	
+    # source simple.world
     set stopLoop 0
     mat enter
     mat matrix H
@@ -229,6 +180,33 @@ proc manualControlLoop {} {
     mat matrix Fdelta
     mat matrix Cdelta
     while {!$stopLoop} {
+	
+	# Normalize theta
+	#puts $theta
+	set thetaWhole [ expr floor(abs($theta / 2.0 / $PI)) ]
+	# puts $thetaWhole
+	set thetaCompas [ expr abs($theta) - $thetaWhole * 2.0 * $PI ]
+	if { $thetaCompas > $PI } {
+	   set thetaCompas [ expr $thetaCompas - 2.0 * $PI ]
+	}
+	# puts $thetaCompas
+	# Get compas
+	set thetaCompasNoise [ expr $thetaCompas + [ rndGauss 0.0 $sigmaTheta ] ]
+	# puts "Compas: $thetaCompas"
+	# puts "Compas + Noise: $thetaCompasNoise"
+	
+	# Get random becon
+	set K [ expr int( rand() * $numBecons ) ]
+	set K 1
+	set atanTmp [expr atan2([lindex $becon_k($K) 1] - $y, [lindex $becon_k($K) 0] - $x)]
+	set alpha_K [ expr $atanTmp - $thetaCompasNoise ]
+	set alphaNoise_K [ expr $alpha_K + [ rndGauss 0.0 $sigmaAlpha ] ]
+	#puts "beacon: $becon_k($K)"
+	#puts "becon: $atanTmp"
+	#puts "compas: $thetaCompas"
+	#puts " alpha_K $alpha_K"
+	#puts $alpha_K
+	
       # draw new robot
       deleteRobot world1
       drawRobot world1 $x $y $theta
@@ -303,6 +281,8 @@ set vneg -0.5
 
 proc obstacleAvoidanceLoop {} {
     global x y theta dt nRays range thresholdDist vpos vneg stopLoop
+	
+
 
     set stopLoop 0
     mat enter

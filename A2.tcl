@@ -57,7 +57,7 @@ set leftW1 0.0
 set bottomW1 0.0
 set widthW1 30.0
 set heightW1 30.0
-set wToC1 10.0
+set wToC1 20.0
 # a key handler is passed to this canvas
 createWorldCanvas world1 $leftW1 $bottomW1 $widthW1 $heightW1 $wToC1 \
     keyHandler
@@ -158,6 +158,8 @@ proc wallFollowing {} {
       robosim getTransformationMatrix $x $y $theta H
       # get laser scan
       set scan [robosim laserScan H]
+      drawLaserScan world1 $scan
+      update
       #####################################
       # analyze laser scan
       
