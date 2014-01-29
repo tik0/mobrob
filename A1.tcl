@@ -152,7 +152,7 @@ proc motionCovariance {CdeltaName x y v dt kl kr} {
 #----------------------------------------------------------------------------
 
 # time step
-set dt 0.1
+set dt 0.5
 # wheel angular
 set beta [expr $PIHALF]
 # speed state
@@ -162,12 +162,12 @@ set v 0.0
 # rotatory/translatory speed increase/decrease
 set dbeta 0.1
 # set dvr 0.05
-set dvt 0.1
+set dvt 0.05
 # used for keyboard control
 set stopLoop 0
 # factors for motion covariance
-set kl 0.01
-set kr 0.01
+set kl 0.1
+set kr 0.1
 # initial variance in each direction
 set c00 0.1
 set c11 0.1
@@ -179,28 +179,18 @@ proc keyHandler {canvasName key} {
 
     switch $key {
       "Left" {
-#           set vl [expr $vl - $dvr]
-#           set vr [expr $vr + $dvr]
           set beta [expr $beta + $dbeta]
       }
       "Right" {
-#           set vl [expr $vl + $dvr]
-#           set vr [expr $vr - $dvr]
           set beta [expr $beta - $dbeta]
       }
       "Up" {
-#           set vl [expr $vl + $dvt]
-#           set vr [expr $vr + $dvt]
           set v [expr $v + $dvt]
       }
       "Down" {
-#           set vl [expr $vl - $dvt]
-#           set vr [expr $vr - $dvt]
           set v [expr $v - $dvt]
       }
       "space" {
-#           set vl 0.0
-#           set vr 0.0
           set v 0.0
       }
       "Escape" {
@@ -221,7 +211,6 @@ set freeze 0
 
 proc manualControlLoop {} {
       global x y theta dt v beta L rc wc stopLoop kl kr c00 c11 c22 scale points freeze
-#     global x y theta dt vl vr stopLoop kl kr c00 c11 c22 scale points freeze
     
 #     source simple.world
     set stopLoop 0
@@ -240,6 +229,7 @@ proc manualControlLoop {} {
       deleteRobot world1
       set frontWheelID [robosim addWheel $rc $wc $L 0.0 $beta 1 0]
       drawRobot world1 $x $y $theta
+	  update
       # draw uncertainty ellipse
       # puts [formatMatrix Cp]
       deleteEllipse world1
@@ -283,8 +273,6 @@ proc manualControlLoop {} {
       if {$c1 || $mc} {
           puts "predicted collision at $x1 $y1 $theta1"
           # stop the robot
-#           set vl 0.0
-#           set vr 0.0
           set v 0.0
           # draw a pair of collision dots
           drawCircleWC world1 $x $y 3 orange yellow 1 "collision"
