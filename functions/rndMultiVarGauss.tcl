@@ -17,10 +17,11 @@ proc rndMultiVarGauss {C_name center_name x_name} {
     mat matrix rnd
     # eigenvalue decomposition
     mat eigenSymm $C_name E lambda
-    # puts [formatMatrix E]
-    # puts [formatMatrix lambda]
+    #puts [formatMatrix E]
+    #puts [formatMatrix lambda]
     # lambda = sigma^2 -> sigma = sqrt(lambda)
     mat sqrt lambda sigma
+	#puts [formatMatrix sigma]
     # generate random numbers with stddev. according to eigenvalues
     set rndList {}
     set sigmaList [mat getVectorList sigma]
