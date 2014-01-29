@@ -98,7 +98,7 @@ set scaleHight [expr $cHight / $heightW1]
 
 ## Monte Carlo Setup
 # Amount of samples
-set numSamples 300;
+set numSamples 100;
 # Initial sample
 for {set k 0} {$k < $numSamples} {incr k} {
     # x y theta importanceFactor
@@ -272,6 +272,7 @@ proc obstacleAvoidanceLoop {} {
       # Draw robot
       .c delete robot
       .c create line [expr $x * $scaleWidth]  [expr $cHight - $y * $scaleHight]  [expr $x*$scaleWidth+$particleLenght*cos($theta)] [expr $cHight - $y*$scaleHight -$particleLenght*sin($theta)] -arrow last -fill black -tags robot
+	  
       # Draw particles
       .c delete particles
       for {set k 0} {$k < $numSamples} {incr k} {
@@ -302,23 +303,7 @@ proc obstacleAvoidanceLoop {} {
 		rndMultiVarGauss pCp center rndVec
 		set rndVecList [mat getVectorList rndVec]
 		lassign $rndVecList xr yr thetar
-		
-		# If the robot doesn't move, set the values to zero
-		# puts "$xr $yr $thetar"
-		# puts [formatMatrix pCp]
-		#lassign [isnan $xr ] xrIsNan
-		#lassign [isnan $yr ] yrIsNan
-		#lassign [isnan $thetar ] thetarIsNan
-		#if { $xrIsNan } {
-		#	set xr 0.0					
-		#}
-		#if { $yrIsNan } {
-		#	set yr 0.0
-		#}
-		#if { $thetarIsNan } {
-		#	set thetar 0.0
-		#}
-		
+				
 		# Add the noise
 		set ptheta [expr $theta1 + $thetar]
 		set px [expr $x1 + $xr]
@@ -343,11 +328,12 @@ proc obstacleAvoidanceLoop {} {
 			for {set kk 0} {$kk < $numSamples} {incr kk} {
 				set samples_k($kk) [list $px_k($kk) $py_k($kk) $ptheta_k($kk) [lindex $samples_k($kk) 3]] 
 			}
+			puts "Step: $loopCount -> Odometry"
 		} else {
 		# #####################################################################
 		# #                   Laserupdate                                     #
 		# #####################################################################
-		puts "Laserupdate"
+		puts "Step: $loopCount -> Laserupdate"
 		
 		# ### Get the importance factors
 		  for {set kk 0} {$kk < $numSamples} {incr kk} {
@@ -395,17 +381,26 @@ proc obstacleAvoidanceLoop {} {
 		  normImportanceFactorsLog
 		  # Normalize again (just to be sure in the case, that the log normalization does not work properly)
 		  normImportanceFactors
-		  
-		  # Check if everything sums to one
-		  set alpha 0.0
-		   for {set kk 0} {$kk < $numSamples} {incr kk} {
-		     #puts [lindex $samples_k($kk) 3]
-			 
-		  	set alpha [expr $alpha + [lindex $samples_k($kk) 3]]
 		  }
-		  puts $alpha
-		}
-#       sleep 1
+		  # Check the particle mean
+		  set xMean 0.0
+		  set yMean 0.0
+		  set thetaMean 0.0
+		  for {set kk 0} {$kk < $numSamples} {incr kk} {
+		   set xMean [expr $xMean + [lindex $samples_k($kk) 0]]
+		   set yMean [expr $yMean + [lindex $samples_k($kk) 1]]
+		   set thetaMean [expr $thetaMean + [lindex $samples_k($kk) 2]]
+		  }
+		  set xMean [ expr $xMean / $numSamples]
+		  set yMean [ expr $yMean / $numSamples]
+		  set thetaMean [ expr $thetaMean / $numSamples]
+		  
+		  puts "x-Distance [ expr abs($xMean - $x) ]"
+		  puts "y-Distance [ expr abs($yMean - $y) ]"
+		  puts "theta-Distance [ expr abs($thetaMean - $theta) ]"
+		  # sleep 1
+
+		
     }
     mat leave
     
