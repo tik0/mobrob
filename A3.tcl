@@ -65,7 +65,7 @@ set xR 0.0
 set yR 0.0
 set phiR 0.0
 set sweep [expr $PI]
-set nRays 7
+set nRays 21
 set range 10.0
 set sigmaSlope 0.0
 set sigmaOffset 0.2
@@ -83,8 +83,8 @@ createWorldCanvas world1 $leftW1 $bottomW1 $widthW1 $heightW1 $wToC1 \
 setWorldCanvasGrid world1 10
 
 # initialize robot position
-set x 10.0
-set y 10.0
+set x 5.0
+set y 12.0
 set theta $PI
 
 # Scaling factors for animation
@@ -98,7 +98,7 @@ set scaleHight [expr $cHight / $heightW1]
 
 ## Monte Carlo Setup
 # Amount of samples
-set numSamples 100;
+set numSamples 300;
 # Initial sample
 for {set k 0} {$k < $numSamples} {incr k} {
     # x y theta importanceFactor
@@ -128,10 +128,10 @@ set c11 0.1
 set c22 0.01
 
 # Uncertanty of the laser
-set sigmaLaser 0.1
+set sigmaLaser 1
 
 # Laser update every stepSensorUpdate step
-set stepSensorUpdate 1
+set stepSensorUpdate 5
 
 # show uncertainty ellipse
 set points 200
@@ -217,6 +217,8 @@ proc obstacleAvoidanceLoop {} {
           }
       }
       # analyse both sides
+	  set vlOld $vl
+      set vrOld $vr
       set leftClose [expr $leftMinDist < $thresholdDist]
       set rightClose [expr $rightMinDist < $thresholdDist]
       if {$leftClose && $rightClose} {
@@ -284,10 +286,12 @@ proc obstacleAvoidanceLoop {} {
 		# ## Add noise from gaussian distribution
 		# Get random values from steering uncertainties
 		# update uncertainty
-    	motionCovariance Cdelta $pxOld $pyOld $pthetaOld $vl $vr $dt $kl $kr
+    	motionCovariance Cdelta $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt $kl $kr
 		# puts [formatMatrix Cdelta]
-		motionJacobian Fdelta $pxOld $pyOld $pthetaOld $vl $vr $dt
-		poseJacobian Fp $pxOld $pyOld $pthetaOld $vl $vr $dt
+		motionJacobian Fdelta $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt
+		poseJacobian Fp $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt
+		
+
 		
 		mat matrix pCp 3 3
 		matset pCp [matexpr Fdelta * Cdelta * ~Fdelta]
@@ -297,12 +301,13 @@ proc obstacleAvoidanceLoop {} {
 		lassign $rndVecList xr yr thetar
 		
 		# If the robot doesn't move, set the values to zero
-		# puts "$xr $yr $thetar"
+		puts "$xr $yr $thetar"
+		puts [formatMatrix pCp]
 		lassign [isnan $xr ] xrIsNan
 		lassign [isnan $yr ] yrIsNan
 		lassign [isnan $thetar ] thetarIsNan
 		if { $xrIsNan } {
-			set xr 0.0
+			set xr 0.0					
 		}
 		if { $yrIsNan } {
 			set yr 0.0
@@ -384,10 +389,14 @@ proc obstacleAvoidanceLoop {} {
 		  # ## Renormalize samples_k
 		  # normImportanceFactors
 		  normImportanceFactorsLog
+		  # Normalize again (just to be sure in the case, that the log normalization does not work properly)
+		  normImportanceFactors
 		  
 		  # Check if everything sums to one
 		  set alpha 0.0
 		   for {set kk 0} {$kk < $numSamples} {incr kk} {
+		     #puts [lindex $samples_k($kk) 3]
+			 
 		  	set alpha [expr $alpha + [lindex $samples_k($kk) 3]]
 		  }
 		  puts $alpha
@@ -402,7 +411,7 @@ proc obstacleAvoidanceLoop {} {
 
 
 # Do obstacle avoidance on startup:
-#  source "obstacleAvoidance.world"
-source "TestWorld.world"
+source "obstacleAvoidance.world"
+# source "TestWorld.world"
 drawWorld world1
 obstacleAvoidanceLoop
