@@ -21,11 +21,16 @@ proc rndMultiVarGauss {C_name center_name x_name} {
     #puts [formatMatrix lambda]
     # lambda = sigma^2 -> sigma = sqrt(lambda)
     mat sqrt lambda sigma
+ 
 	#puts [formatMatrix sigma]
     # generate random numbers with stddev. according to eigenvalues
     set rndList {}
     set sigmaList [mat getVectorList sigma]
     foreach s $sigmaList {
+        lassign [isnan $s ] sIsNan
+        if { $sIsNan } {
+	      set s 0.0					
+	}
 	lappend rndList [gsl randGaussian $s]
     }
     mat setRowVector rnd $rndList
