@@ -6,11 +6,11 @@ proc logAdd {a b} {
         set b $a
         set a $c
     }
-    set c [expr $a - $b]
     
-    if { ($a == -inf) || ($c < -36) } {
+    if { ($a == -inf) || ([ expr $a - $b ] < -36) } {
         return $b
     } else {
+	    set c [expr $a - $b]
         return [expr $b + log(exp($c) + 1.0 )];
     }
 }
