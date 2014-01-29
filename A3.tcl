@@ -189,6 +189,7 @@ proc obstacleAvoidanceLoop {} {
       # update Cp from Cp and Cdelta and the Jacobians
       # (error propagation law)
       matset Cp [matexpr Fp * Cp * ~Fp + Fdelta * Cdelta * ~Fdelta]
+      matset Tmp [matexpr Fdelta * Cdelta * ~Fdelta]
       # puts [formatMatrix Cp]
       # puts "\{[mat getRowByRow Cp]\}"
       # get transformation matrix for current pose
@@ -197,6 +198,8 @@ proc obstacleAvoidanceLoop {} {
       robosim getTransformationMatrix $x $y $theta H
       # get laser scan
       set scan [robosim laserScan H]
+      drawLaserScan world1 $scan
+      update
       # analyze laser scan
       # find closest distance on the left side
       set leftMinDist $range
@@ -294,27 +297,27 @@ proc obstacleAvoidanceLoop {} {
 
 		
 		mat matrix pCp 3 3
-		matset pCp [matexpr Fdelta * Cdelta * ~Fdelta]
-		# matset pCp [matexpr Fp * CpInit * ~Fp + Fdelta * Cdelta * ~Fdelta]
+		# matset pCp [matexpr Fdelta * Cdelta * ~Fdelta]
+		matset pCp [matexpr Fp * CpInit * ~Fp + Fdelta * Cdelta * ~Fdelta]
 		rndMultiVarGauss pCp center rndVec
 		set rndVecList [mat getVectorList rndVec]
 		lassign $rndVecList xr yr thetar
 		
 		# If the robot doesn't move, set the values to zero
-		puts "$xr $yr $thetar"
-		puts [formatMatrix pCp]
-		lassign [isnan $xr ] xrIsNan
-		lassign [isnan $yr ] yrIsNan
-		lassign [isnan $thetar ] thetarIsNan
-		if { $xrIsNan } {
-			set xr 0.0					
-		}
-		if { $yrIsNan } {
-			set yr 0.0
-		}
-		if { $thetarIsNan } {
-			set thetar 0.0
-		}
+		# puts "$xr $yr $thetar"
+		# puts [formatMatrix pCp]
+		#lassign [isnan $xr ] xrIsNan
+		#lassign [isnan $yr ] yrIsNan
+		#lassign [isnan $thetar ] thetarIsNan
+		#if { $xrIsNan } {
+		#	set xr 0.0					
+		#}
+		#if { $yrIsNan } {
+		#	set yr 0.0
+		#}
+		#if { $thetarIsNan } {
+		#	set thetar 0.0
+		#}
 		
 		# Add the noise
 		set ptheta [expr $theta1 + $thetar]
@@ -349,7 +352,7 @@ proc obstacleAvoidanceLoop {} {
 		# ### Get the importance factors
 		  for {set kk 0} {$kk < $numSamples} {incr kk} {
 			# ## get transformation matrix for current particle
-			robosim getTransformationMatrix $px $py $ptheta H
+			robosim getTransformationMatrix $px_k($kk) $py_k($kk) $ptheta_k($kk) H
 			# get laser scan from particle
 			set scanParticle [robosim laserScan H]
 			set importanceFactor 0.0
@@ -372,6 +375,7 @@ proc obstacleAvoidanceLoop {} {
 			# Get P(s,l_kk)
 			
 			set importanceFactorLog_k($kk) $importanceFactor
+			
 			#if {[catch {set importanceFactor_k($kk) [expr exp($importanceFactor)]}]} {
 			#  set importanceFactor_k($kk) 0.0
 			#}
@@ -411,7 +415,7 @@ proc obstacleAvoidanceLoop {} {
 
 
 # Do obstacle avoidance on startup:
-source "obstacleAvoidance.world"
-# source "TestWorld.world"
+# source "obstacleAvoidance.world"
+source "TestWorld.world"
 drawWorld world1
 obstacleAvoidanceLoop
