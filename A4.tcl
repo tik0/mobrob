@@ -6,8 +6,8 @@
 # ===========================================================================
 
 # ### Set variables
-set sigmaTheta 0.1
-set sigmaAlpha 0.1
+set sigmaP 1
+set sigmaK 1
 set numBecons 10
 
 # ### Get some functions
@@ -95,9 +95,9 @@ set theta 0.0
 for {set k 0} {$k < $numBecons} {incr k} {
     # x y
 	# Random
-    set becon_k($k) [list [expr rand()*$widthW1] [expr rand()*$heightW1]]
+    set beacon_k($k) [list [expr rand()*$widthW1] [expr rand()*$heightW1]]
 	# draw a pair of becons
-    drawCircleWC world1 [lindex $becon_k($k) 0] [lindex $becon_k($k) 1] 3 red yellow 1 "becons"
+    drawCircleWC world1 [lindex $beacon_k($k) 0] [lindex $beacon_k($k) 1] 3 red yellow 1 "becons"
 }
 
 #----------------------------------------------------------------------------
@@ -123,7 +123,7 @@ set c11 0.1
 set c22 0.01
 
 proc keyHandler {canvasName key} {
-    global vl vr dvr dvt stopLoop freeze
+    global u vl vr dvr dvt stopLoop freeze
 
     switch $key {
       "Left" {
@@ -162,8 +162,10 @@ set scale 1.0
 # frozen uncertainty ellipses
 set freeze 0
 
+set beta 0.0
+
 proc manualControlLoop {} {
-    global x y theta dt vl vr stopLoop kl kr c00 c11 c22 scale points freeze sigmaTheta becon_k numBecons sigmaAlpha PI
+    global x y theta dt vl vr stopLoop kl kr c00 c11 c22 scale points freeze beacon_k numBecons sigmaK sigmaP PI beta
 
 	
 	
@@ -179,33 +181,38 @@ proc manualControlLoop {} {
     mat matrix Fp
     mat matrix Fdelta
     mat matrix Cdelta
+    mat matrix pFp
+    mat matrix pFdelta
+    mat matrix pCdelta
+    
+    
+    # Set the inital covariance and position
+    matset Cp_k_k [matexpr Cp]
+    
+    #matset p_k1_k 3 1
+    #matset p_k_k 3 1
+    #mat matrix p_k_k
+    #mat matrix p_k1_k
+    #set pkkList [list $x $y $theta]
+    #mat setRowVector pkk $pkkList
+    mat matrix p_k1_k 3 1
+    mat matrix p_k_k 3 1
+    mat set p_k_k 0 0 $x
+    mat set p_k_k 1 0 $y
+    mat set p_k_k 2 0 $theta
+    
+    
     while {!$stopLoop} {
+    # Set the values
+    set p_k_k_List [mat getVectorList p_k_k]
+
+    set px [lindex $p_k_k_List 0]
+    set py [lindex $p_k_k_List 1]
+    set ptheta [lindex $p_k_k_List 2]
 	
-	# Normalize theta
-	#puts $theta
-	set thetaWhole [ expr floor(abs($theta / 2.0 / $PI)) ]
-	# puts $thetaWhole
-	set thetaCompas [ expr abs($theta) - $thetaWhole * 2.0 * $PI ]
-	if { $thetaCompas > $PI } {
-	   set thetaCompas [ expr $thetaCompas - 2.0 * $PI ]
-	}
-	# puts $thetaCompas
-	# Get compas
-	set thetaCompasNoise [ expr $thetaCompas + [ rndGauss 0.0 $sigmaTheta ] ]
-	# puts "Compas: $thetaCompas"
-	# puts "Compas + Noise: $thetaCompasNoise"
+
 	
-	# Get random becon
-	set K [ expr int( rand() * $numBecons ) ]
-	set K 1
-	set atanTmp [expr atan2([lindex $becon_k($K) 1] - $y, [lindex $becon_k($K) 0] - $x)]
-	set alpha_K [ expr $atanTmp - $thetaCompasNoise ]
-	set alphaNoise_K [ expr $alpha_K + [ rndGauss 0.0 $sigmaAlpha ] ]
-	#puts "beacon: $becon_k($K)"
-	#puts "becon: $atanTmp"
-	#puts "compas: $thetaCompas"
-	#puts " alpha_K $alpha_K"
-	#puts $alpha_K
+      
 	
       # draw new robot
       deleteRobot world1
@@ -213,13 +220,17 @@ proc manualControlLoop {} {
       # draw uncertainty ellipse
       # puts [formatMatrix Cp]
       deleteEllipse world1
-      drawUncertainty world1 $x $y $theta Cp $scale $points
+      drawUncertainty world1 $px $py $ptheta Cp_k_k $scale $points
       if {$freeze} {
-          drawUncertainty world1 $x $y $theta Cp $scale $points \
+          drawUncertainty world1 $px $py $ptheta Cp_k_k $scale $points \
             1 black frozen
           set freeze 0
       }
       update
+      
+      #############################################################################
+      # 1. Predict the movement (calculation of p_k1_k and Cp_k1_k
+      #############################################################################
       # update uncertainty
       motionCovariance Cdelta $x $y $theta $vl $vr $dt $kl $kr
       # puts [formatMatrix Cdelta]
@@ -227,7 +238,20 @@ proc manualControlLoop {} {
       poseJacobian Fp $x $y $theta $vl $vr $dt
       # update Cp from Cp and Cdelta and the Jacobians
       # (error propagation law)
-      matset Cp [matexpr Fp * Cp * ~Fp + Fdelta * Cdelta * ~Fdelta]
+      
+      
+      motionCovariance pCdelta $px $py $ptheta $vl $vr $dt $kl $kr
+      motionJacobian pFdelta $px $py $ptheta $vl $vr $dt
+      poseJacobian pFp $px $py $ptheta $vl $vr $dt
+      matset Cp_k1_k [matexpr pFp * Cp_k_k * ~pFp + pFdelta * pCdelta * ~pFdelta]
+       # get transformation matrix for current pose
+      robosim getTransformationMatrix $px $py $ptheta H
+      # update pose
+      lassign [updatePose $px $py $ptheta $vl $vr $dt] px1 py1 ptheta1
+      # get transformation matrix for next pose
+      robosim getTransformationMatrix $px1 $py1 $ptheta1 H1
+      
+      
       # puts [formatMatrix Cp]
       # puts "\{[mat getRowByRow Cp]\}"
       # get transformation matrix for current pose
@@ -247,7 +271,7 @@ proc manualControlLoop {} {
       set c1 [robosim collision H1]
       set mc [robosim movementCollision H H1]
       if {$c1 || $mc} {
-          puts "predicted collision at $x1 $y1 $theta1"
+          puts "predicted collision at $x $y $theta $vl $vr"
           # stop the robot
           set vl 0.0
           set vr 0.0
@@ -262,6 +286,121 @@ proc manualControlLoop {} {
           set y $y1
           set theta $theta1
       }
+	# Normalize theta
+	#puts $theta
+	#if { $theta > 0.0} {
+	#  set thetaWhole [ expr floor(abs($theta / 2.0 / $PI)) ]
+	#} else {
+	#  set thetaWhole [ expr floor(abs($theta / 2.0 / $PI)) ]
+	#}
+	## puts $thetaWhole
+	#set theta [ expr $theta - $thetaWhole * 2.0 * $PI - $PI]
+	#puts "Theta $theta"
+
+      
+    mat set p_k1_k 0 0 $px1
+    mat set p_k1_k 1 0 $py1
+    mat set p_k1_k 2 0 $ptheta1
+      
+      #############################################################################
+      # 2. Read sensordata from one arb. beacon (calculation of alpha=z_tilde_P_k1 and beta=z_tilde_K_k1)
+      #############################################################################
+      # [lindex $p_k_k 0] [lindex $p_k_k 1] [lindex $p_k_k 2] [lindex $u 0] [lindex $u 1] 
+      # Get random becon
+	set K [ expr int( rand() * $numBecons ) ]
+	set atanTmp [expr atan2([lindex $beacon_k($K) 1] - $y, [lindex $beacon_k($K) 0] - $x)]
+	set alpha [ expr $atanTmp - $theta - [ rndGauss 0.0 $sigmaP ] ]
+	#puts "beacon: $beacon_k($K)"
+	#puts "becon: $atanTmp"
+	#puts "compas: $thetaCompas"
+	#puts " alpha_K $alpha_K"
+	#puts $alpha_K
+	
+	# Get compas
+	set beta [ expr atan2($y, $x) + [ rndGauss 0.0 $sigmaK ] ]
+	# set alphaNoise [ expr $theta + [ rndGauss 0.0 $sigmaP ] ]
+	# puts "Compas: $beta"
+	# puts "Compas + Noise: $betaNoise"
+	
+      #############################################################################
+      # 3. Calculate the hypotheses for every beacon i (Calculate z_hat_k1)
+      #############################################################################
+      
+      # Iterate through every beacon
+      set matches 0
+      for {set i 0} {$i < $numBecons} {incr i} {
+          # Get the hypothesis
+          set z_hat_k1 [ expr atan2([lindex $beacon_k($i) 1] - $y, [lindex $beacon_k($i) 0] - $x) - $beta]
+          
+          #############################################################################
+	  # 4. Calculate innovation
+	  #############################################################################
+	  # Get Jacobi-Matrix H for the messurement i at current position
+	  set bx [expr [lindex $beacon_k($i) 0] - $x]
+	  set by [expr [lindex $beacon_k($i) 1] - $y]
+	  set tmp [expr 1.0 / (1.0 + pow($by / $bx, 2))]
+	  
+	  set h1 [expr $by / pow($bx,2) * $tmp]
+	  set h2 [expr -1.0 / $bx * $tmp]
+	  set h3 [expr -1.0]
+	  mat matrix Hi 1 3
+	  mat set Hi 0 0 $h1
+	  mat set Hi 0 1 $h2
+	  mat set Hi 0 2 $h3
+	  
+	  # Get covariance R of messurement i
+	  set R [expr pow($sigmaP,2)]
+	  
+	  # Get covariance Cv of innovation
+	  matset Cv_tmp [matexpr Hi * Cp_k1_k * ~Hi]
+	  
+	  set Cv_tmp_list [mat getVectorList Cv_tmp]
+	  
+	  
+	  set Cv [expr [lindex $Cv_tmp_list 0] + $R]
+	  
+	  # Get innovation v
+	  set v [expr $beta - $z_hat_k1]
+	  
+	  # Calculate the innovation gate and the Kalman gain K
+	  set g 1
+	  # puts "[expr $v * $Cv * $v]"
+	  if { [expr $v * $Cv * $v] <= [expr pow($g,2)] } {
+            
+	    if {$matches == 0} {
+	      incr matches
+	      # create matrices for v and Cv
+	      mat matrix Cv_mat 1 1
+	      mat set Cv_mat 0 0 [expr 1.0 / $Cv]
+	      mat matrix v_mat 1 1
+	      mat set v_mat 0 0 $v
+	  
+	      matset K [matexpr Cp_k1_k * ~Hi * Cv_mat]
+	      # puts [formatMatrix Hi]
+	      
+	    } else {
+	      incr matches
+	      break
+	    }
+	  }
+      }
+      #############################################################################
+      # 5. Calculate the new position and variance
+      #############################################################################
+	  
+	  #puts "$matches"
+      if { $matches == 1} {
+         puts "Match found"
+         #puts [formatMatrix K]
+         matset p_k_k [matexpr p_k1_k + K * v_mat]
+         matset Cp_k_k [matexpr Cp_k1_k - K * Cv_mat * ~K]
+         
+      } else {
+	#puts "To many/No matches found"
+         matset Cp_k_k [matexpr Cp_k1_k]
+         matset p_k_k [matexpr p_k1_k]
+      }
+     
     }
     mat leave
 }
