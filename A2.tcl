@@ -9,9 +9,6 @@ puts "([info script])"
 robosim clearWorld
 robosim clearRobot
 
-# what to do on startup
-set doObstacleAvoidance 1
-
 # robot with differential steering
 # wheel radius
 set r 0.5
@@ -37,7 +34,6 @@ robosim addBodyPart $ml $l2 $ml2 $l
 robosim addBodyPart 0 0 $l 0
 
 # laser scanner (only for obstacle avoidance)
-if {$doObstacleAvoidance} {
     set xR 0.0
     set yR 0.0
     set phiR 0.0
@@ -47,7 +43,6 @@ if {$doObstacleAvoidance} {
     set sigmaSlope 0.0
     set sigmaOffset 0.2
     robosim createLaser $xR $yR $phiR $sweep $nRays $range $sigmaSlope $sigmaOffset
-}
 
 # load world
 # source "simple.world"
@@ -161,7 +156,7 @@ proc wallFollowing {} {
       drawLaserScan world1 $scan
       update
       #####################################
-      # analyze laser scan
+      # analyse laser scan
       
       # find closest distance on the left side
       set leftMinDist $range
@@ -266,10 +261,9 @@ proc wallFollowing {} {
 }
 
 # uncomment these lines for obstacle avoidance movement on startup:
-if {$doObstacleAvoidance} {
     # source "obstacleAvoidance.world"
     # source "simple.world"
     source "TestWorld.world"
     drawWorld world1
     wallFollowing
-}
+
