@@ -29,7 +29,7 @@ set L 2.0
 # wheel width
 set wc [expr $w]
 # create front wheel
-set frontWheelID [robosim addWheel $rc $wc $L 0.0 $PIHALF 1 0]
+set frontWheelID [robosim addWheel $rc $wc $L 0.0 $PIHALF 1 1]
 
 
 # create body
@@ -80,10 +80,11 @@ set theta 0.0
 proc updatePose {x y theta v dt beta L} {
     global l
     set cb [expr cos($beta)]
+	set sb [expr sin($beta)]
     set ct [expr cos($theta - $dt / 2.0 / $L * $v * $cb)]
     set st [expr sin($theta - $dt / 2.0 / $L * $v * $cb)]
-    set dx_dt [expr $v * sin($beta) * $ct ]
-    set dy_dt [expr $v * sin($beta) * $st ]
+    set dx_dt [expr $v * $sb * $ct ]
+    set dy_dt [expr $v * $sb * $st ]
     set dTheta_dt [expr -1 / $L * $v * $cb ]
     set x [expr $x + $dx_dt * $dt ]
     set y [expr $y + $dy_dt * $dt ]
@@ -140,11 +141,11 @@ proc poseJacobian {FpName x y theta v beta dt} {
 
 # motion covariance, see Siegwart/Nourbakhsh p.188
 
-proc motionCovariance {CdeltaName x y v dt kl kr} {
+proc motionCovariance {CdeltaName v dt dbeta ks kb} {
     set s [expr $dt * $v]
     mat setRowByRow $CdeltaName \
-      "{[expr $kr * abs($s)] 0.0} \
-         {0.0 [expr $kl * abs($s)]}"
+      "{[expr $ks * abs($s)] 0.0} \
+         {0.0 [expr $kb * abs($dbeta)]}"
 }
 
 #----------------------------------------------------------------------------
@@ -161,28 +162,31 @@ set v 0.0
 # set vr 0.0
 # rotatory/translatory speed increase/decrease
 set dbeta 0.1
+set betaSet 0
 # set dvr 0.05
 set dvt 0.05
 # used for keyboard control
 set stopLoop 0
 # factors for motion covariance
-set kl 0.1
-set kr 0.1
+set ks 0.1
+set kb 0.1
 # initial variance in each direction
 set c00 0.1
 set c11 0.1
 set c22 0.01
 
 proc keyHandler {canvasName key} {
-      global v beta dbeta dvt stopLoop freeze
+      global v beta dbeta dvt stopLoop freeze betaSet
 #     global vl vr dvr dvt stopLoop freeze
 
     switch $key {
       "Left" {
           set beta [expr $beta + $dbeta]
+		  set betaSet 1
       }
       "Right" {
           set beta [expr $beta - $dbeta]
+		  set betaSet 1
       }
       "Up" {
           set v [expr $v + $dvt]
@@ -210,7 +214,7 @@ set scale 1.0
 set freeze 0
 
 proc manualControlLoop {} {
-      global x y theta dt v beta L rc wc stopLoop kl kr c00 c11 c22 scale points freeze
+      global x y theta dt v beta dbeta betaSet L rc wc stopLoop ks kb c00 c11 c22 scale points freeze frontWheelID
     
 #     source simple.world
     set stopLoop 0
@@ -227,11 +231,10 @@ proc manualControlLoop {} {
     while {!$stopLoop} {
       # draw new robot
       deleteRobot world1
-      set frontWheelID [robosim addWheel $rc $wc $L 0.0 $beta 1 0]
+	  robosim setSteering $frontWheelID $beta
       drawRobot world1 $x $y $theta
 	  update
       # draw uncertainty ellipse
-      # puts [formatMatrix Cp]
       deleteEllipse world1
       drawUncertainty world1 $x $y $theta Cp $scale $points
       if {$freeze} {
@@ -241,22 +244,19 @@ proc manualControlLoop {} {
       }
       update
       # update uncertainty
-#       motionCovariance Cdelta $x $y $theta $vl $vr $dt $kl $kr
-      motionCovariance Cdelta $x $y $v $dt $kl $kr
-      # puts [formatMatrix Cdelta]
-#       motionJacobian Fdelta $x $y $theta $vl $vr $dt
-#       poseJacobian Fp $x $y $theta $vl $vr $dt
+	  if {$betaSet} {
+		motionCovariance Cdelta $v $dt $dbeta $ks $kb
+		} else {
+		motionCovariance Cdelta $v $dt 0.0 $ks $kb
+		}
       motionJacobian Fdelta $x $y $theta $v $beta $dt
       poseJacobian Fp $x $y $theta $v $beta $dt
       # update Cp from Cp and Cdelta and the Jacobians
       # (error propagation law)
       matset Cp [matexpr Fp * Cp * ~Fp + Fdelta * Cdelta * ~Fdelta]
-      # puts [formatMatrix Cp]
-      # puts "\{[mat getRowByRow Cp]\}"
       # get transformation matrix for current pose
       robosim getTransformationMatrix $x $y $theta H
       # update pose
-#       lassign [updatePose $x $y $theta $vl $vr $dt] x1 y1 theta1
       lassign [updatePose $x $y $theta $v $dt $beta $L] x1 y1 theta1
       # get transformation matrix for next pose
       robosim getTransformationMatrix $x1 $y1 $theta1 H1
