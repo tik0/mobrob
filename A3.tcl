@@ -60,6 +60,9 @@ robosim addBodyPart $ml $ml2 $ml $l2
 robosim addBodyPart $ml $l2 $ml2 $l
 robosim addBodyPart 0 0 $l 0
 
+# Uncertanty of the laser
+set sigmaLaser 0.5
+
 # ## laser scanner
 set xR 0.0
 set yR 0.0
@@ -68,7 +71,7 @@ set sweep [expr $PI]
 set nRays 21
 set range 10.0
 set sigmaSlope 0.0
-set sigmaOffset 0.2
+set sigmaOffset $sigmaLaser
 robosim createLaser $xR $yR $phiR $sweep $nRays $range $sigmaSlope $sigmaOffset
 
 # ## visualize world
@@ -98,7 +101,7 @@ set scaleHight [expr $cHight / $heightW1]
 
 ## Monte Carlo Setup
 # Amount of samples
-set numSamples 100;
+set numSamples 300;
 # Initial sample
 for {set k 0} {$k < $numSamples} {incr k} {
     # x y theta importanceFactor
@@ -127,11 +130,8 @@ set c00 0.1
 set c11 0.1
 set c22 0.01
 
-# Uncertanty of the laser
-set sigmaLaser 1
-
 # Laser update every stepSensorUpdate step
-set stepSensorUpdate 5
+set stepSensorUpdate 100
 
 # show uncertainty ellipse
 set points 200
@@ -173,14 +173,14 @@ proc obstacleAvoidanceLoop {} {
       drawRobot world1 $x $y $theta
       # draw uncertainty ellipse
       # puts [formatMatrix Cp]
-      deleteEllipse world1
-      drawUncertainty world1 $x $y $theta Cp $scale $points
-      if {$freeze} {
-          drawUncertainty world1 $x $y $theta Cp $scale $points \
-            1 black frozen
-          set freeze 0
-      }
-      update
+      #deleteEllipse world1
+      #drawUncertainty world1 $x $y $theta Cp $scale $points
+      #if {$freeze} {
+      #    drawUncertainty world1 $x $y $theta Cp $scale $points \
+      #      1 black frozen
+      #    set freeze 0
+      #}
+      #update
       # update uncertainty
       motionCovariance Cdelta $x $y $theta $vl $vr $dt $kl $kr
       # puts [formatMatrix Cdelta]
@@ -200,7 +200,7 @@ proc obstacleAvoidanceLoop {} {
       set scan [robosim laserScan H]
       drawLaserScan world1 $scan
       update
-      # analyze laser scan
+      # analyse laser scan
       # find closest distance on the left side
       set leftMinDist $range
       for {set n 0} {$n < $nRays / 2} {incr n} {
@@ -269,15 +269,15 @@ proc obstacleAvoidanceLoop {} {
       
       # ### Calculation of the particle movement
 
-      # Draw robot
-      .c delete robot
-      .c create line [expr $x * $scaleWidth]  [expr $cHight - $y * $scaleHight]  [expr $x*$scaleWidth+$particleLenght*cos($theta)] [expr $cHight - $y*$scaleHight -$particleLenght*sin($theta)] -arrow last -fill black -tags robot
-	  
       # Draw particles
       .c delete particles
       for {set k 0} {$k < $numSamples} {incr k} {
-		## Importance sampling (draws a sample from samples_k)
-		set kk [drawSample]
+		## Importance sampling only when we have a sensor update (draws a sample from samples_k)
+		if  { $loopCount % $stepSensorUpdate != 0 } {
+			set kk $k
+		} else {
+			set kk [drawSample]
+		}
       
 		# Get the old particle
 		set pxOld [lindex $samples_k($kk) 0]
@@ -286,28 +286,32 @@ proc obstacleAvoidanceLoop {} {
 		
 		# Update particle with odometry
 		lassign [updatePose $pxOld $pyOld $pthetaOld $vl $vr $dt] x1 y1 theta1
-		
-		# ## Add noise from gaussian distribution
-		# Get random values from steering uncertainties
-		# update uncertainty
-    	motionCovariance Cdelta $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt $kl $kr
-		# puts [formatMatrix Cdelta]
-		motionJacobian Fdelta $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt
-		poseJacobian Fp $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt
-		
 
-		
-		mat matrix pCp 3 3
-		# matset pCp [matexpr Fdelta * Cdelta * ~Fdelta]
-		matset pCp [matexpr Fp * CpInit * ~Fp + Fdelta * Cdelta * ~Fdelta]
-		rndMultiVarGauss pCp center rndVec
-		set rndVecList [mat getVectorList rndVec]
-		lassign $rndVecList xr yr thetar
-				
-		# Add the noise
-		set ptheta [expr $theta1 + $thetar]
-		set px [expr $x1 + $xr]
-		set py [expr $y1 + $yr]
+		if  { $loopCount % $stepSensorUpdate != 0 } {
+			set ptheta $theta1
+			set px $x1
+			set py $y1
+		} else {
+			# ## Add noise from Gaussian distribution
+			# Get random values from steering uncertainties
+			# update uncertainty
+			motionCovariance Cdelta $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt $kl $kr
+			# puts [formatMatrix Cdelta]
+			motionJacobian Fdelta $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt
+			poseJacobian Fp $pxOld $pyOld $pthetaOld $vlOld $vrOld $dt
+
+			mat matrix pCp 3 3
+			# matset pCp [matexpr Fdelta * Cdelta * ~Fdelta]
+			matset pCp [matexpr Fp * CpInit * ~Fp + Fdelta * Cdelta * ~Fdelta]
+			rndMultiVarGauss pCp center rndVec
+			set rndVecList [mat getVectorList rndVec]
+			lassign $rndVecList xr yr thetar
+					
+			# Add the noise
+			set ptheta [expr $theta1 + $thetar]
+			set px [expr $x1 + $xr]
+			set py [expr $y1 + $yr]
+		}
 		
 		# ## Animation of particles
 		.c create line [expr $px * $scaleWidth]  [expr $cHight - $py * $scaleHight]  [expr $px*$scaleWidth+$particleLenght*cos($ptheta)] [expr $cHight - $py*$scaleHight -$particleLenght*sin($ptheta)] -arrow last -fill red -tags particles
@@ -317,10 +321,43 @@ proc obstacleAvoidanceLoop {} {
 		set py_k($k) $py
 		set ptheta_k($k) $ptheta
 	  }
+	   # Draw robot
+      .c delete robot
+      .c create line [expr $x * $scaleWidth]  [expr $cHight - $y * $scaleHight]  [expr $x*$scaleWidth+$particleLenght*cos($theta)] [expr $cHight - $y*$scaleHight -$particleLenght*sin($theta)] -arrow last -fill black -tags robot
+	  
+	# Draw the hypotheses of the robot
+	  deleteEllipse world1
+	  # Calculate the Gaussian out of the samples
+	  # get mean (Circular mean is wrong, there we need something imaginary)
+	  set mu_x 0.0
+	  set mu_y 0.0
+	  set mu_t 0.0
+	  for {set k 0} {$k < $numSamples} {incr k} {
+			set mu_x [expr $mu_x + [lindex $px_k($k)]]
+			set mu_y [expr $mu_y + [lindex $py_k($k)]]
+			set mu_t [expr $mu_t + [lindex $ptheta_k($k)]]
+		}
+	  set mu_x [expr $mu_x / $numSamples]
+      set mu_y [expr $mu_y / $numSamples]
+	  set mu_t [expr $mu_t / $numSamples]
+	  # get covariance
+	  mat matrix X 3 $numSamples
+	  mat matrix Norm 3 3
+	  mat fill Norm [expr 1.0 / $numSamples]
+	  for {set k 0} {$k < $numSamples} {incr k} {
+		  mat set X 0 $k [expr $px_k($k) - $mu_x]
+		  mat set X 1 $k [expr $py_k($k) - $mu_y]
+		  mat set X 2 $k [expr $ptheta_k($k) - $mu_t]
+		}
+		mat matrix Sigma
+		matset Sigma [matexpr X * ~X]
+		mat multE Sigma Norm Sigma
+      drawUncertainty world1 $mu_x $mu_y $mu_t Sigma $scale $points
+	  update		  
 		  
-		  
-		incr loopCount
+		
 		# Odometryupdate else Laserupdate
+		incr loopCount
 		if  { $loopCount % $stepSensorUpdate != 0 } {
 		# #####################################################################
 		# #                   Odometry                                        #
