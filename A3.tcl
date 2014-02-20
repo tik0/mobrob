@@ -88,7 +88,7 @@ setWorldCanvasGrid world1 10
 # initialize robot position
 set x 5.0
 set y 12.0
-set theta $PI
+set theta 0.0
 
 # Scaling factors for animation
 set scaleWidth [expr $cWidth / $widthW1]
@@ -98,18 +98,6 @@ set scaleHight [expr $cHight / $heightW1]
 #----------------------------------------------------------------------------
 # robots control
 #----------------------------------------------------------------------------
-
-## Monte Carlo Setup
-# Amount of samples
-set numSamples 300;
-# Initial sample
-for {set k 0} {$k < $numSamples} {incr k} {
-    # x y theta importanceFactor
-	# Random
-    # set samples_k($k) [list [expr rand()*$widthW1] [expr rand()*$heightW1] [expr rand()*2.0*$PI] [expr 1.0/$numSamples]]
-	# At robots position
-    set samples_k($k) [list [expr $x] [expr $y] [expr $theta] [expr 1.0/$numSamples]]
-}
 
 # time step
 set dt 0.1
@@ -139,6 +127,21 @@ set scale 1.0
 
 # frozen uncertainty ellipses
 set freeze 0
+
+
+## Monte Carlo Setup
+# Amount of samples
+set numSamples 300;
+# Initial sample
+for {set k 0} {$k < $numSamples} {incr k} {
+    # x y theta importanceFactor
+	# Random
+    # set samples_k($k) [list [expr rand()*$widthW1] [expr rand()*$heightW1] [expr rand()*2.0*$PI] [expr 1.0/$numSamples]]
+	# At robots position
+    # set samples_k($k) [list [expr $x] [expr $y] [expr $theta] [expr 1.0/$numSamples]]
+	# At robots position with noise
+	set samples_k($k) [list [expr $x+ [gsl randGaussian $c00]] [expr $y + [gsl randGaussian $c11]] [expr $theta + [gsl randGaussian $c22]] [expr 1.0/$numSamples]]
+}
 
 proc obstacleAvoidanceLoop {} {
     global x y theta dt nRays range thresholdDist kl kr vl vr vpos vneg c00 c11 c22 stopLoop numSamples samples_k widthW1 heightW1 PI particleLenght cWidth cHight points scale freeze sigmaLaser stepSensorUpdate scaleWidth scaleHight
